@@ -1,0 +1,141 @@
+{% extends "frontend/base.html" %}
+{% block title %}Features — Geo API{% endblock %}
+
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0">Features</h5>
+    <div class="d-flex gap-2">
+      <input class="form-control form-control-sm" id="q" placeholder="Filter by name…" style="width: 240px">
+      <button id="reload" class="btn btn-sm btn-outline-secondary">Reload</button>
+    </div>
+  </div>
+
+  <div id="alert-slot"></div>
+
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle">
+      <thead class="table-light">
+        <tr>
+          <th style="width:60px">ID</th>
+          <th>Name</th>
+          <th style="width:120px">Color</th>
+          <th>Geometry</th>
+          <th style="width:120px">Updated</th>
+          <th style="width:160px"></th>
+        </tr>
+      </thead>
+      <tbody id="rows">
+        <tr><td colspan="6" class="text-center text-muted py-4">Sign in to load features.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <nav>
+    <ul class="pagination pagination-sm" id="pager"></ul>
+  </nav>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const rows = document.getElementById("rows");
+  const alertSlot = document.getElementById("alert-slot");
+  let currentUrl = "/api/features/?page_size=25";
+
+  function flash(msg, kind="success") {
+    alertSlot.innerHTML =
+      `<div class="alert alert-${kind} alert-dismissible fade show py-2" role="alert">
+         ${msg}
+         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+       </div>`;
+  }
+
+  function geomLabel(g) {
+    if (!g) return "";
+    if (g.type === "Point") return `Point(${g.coordinates.map(n => n.toFixed(4)).join(", ")})`;
+    return g.type;
+  }
+
+  function rowHtml(f) {
+    const p = f.properties || {};
+    return `
+      <tr data-id="${f.id}">
+        <td class="text-muted">${f.id}</td>
+        <td><input class="form-control form-control-sm" data-field="name" value="${(p.name || "").replace(/"/g, "&quot;")}"></td>
+        <td class="d-flex align-items-center gap-2">
+          <input type="color" class="form-control form-control-color form-control-sm" data-field="color" value="${p.color || "#3388ff"}">
+        </td>
+        <td class="small text-muted">${geomLabel(f.geometry)}</td>
+        <td class="small text-muted">${p.updated_at || ""}</td>
+        <td class="text-end">
+          <button class="btn btn-sm btn-primary" data-action="save">Save</button>
+          <button class="btn btn-sm btn-outline-danger" data-action="delete">Delete</button>
+        </td>
+      </tr>`;
+  }
+
+  async function load(url = currentUrl) {
+    if (!Auth.get()) { return; }
+    currentUrl = url;
+    const q = document.getElementById("q").value.trim();
+    const u = new URL(url, location.origin);
+    if (q) u.searchParams.set("name", q); else u.searchParams.delete("name");
+
+    const r = await Auth.fetch(u.toString());
+    if (!r.ok) { flash(`Error ${r.status} loading features`, "danger"); return; }
+    const data = await r.json();
+    rows.innerHTML = data.results.length
+      ? data.results.map(rowHtml).join("")
+      : `<tr><td colspan="6" class="text-center text-muted py-4">No features.</td></tr>`;
+
+    const pager = document.getElementById("pager");
+    pager.innerHTML = "";
+    if (data.prev) pager.insertAdjacentHTML("beforeend",
+      `<li class="page-item"><a href="#" class="page-link" data-url="${data.prev}">« Prev</a></li>`);
+    pager.insertAdjacentHTML("beforeend",
+      `<li class="page-item disabled"><span class="page-link">${data.count} total</span></li>`);
+    if (data.next) pager.insertAdjacentHTML("beforeend",
+      `<li class="page-item"><a href="#" class="page-link" data-url="${data.next}">Next »</a></li>`);
+  }
+
+  document.getElementById("pager").addEventListener("click", (e) => {
+    const a = e.target.closest("a[data-url]");
+    if (!a) return;
+    e.preventDefault();
+    load(a.dataset.url);
+  });
+
+  document.getElementById("reload").addEventListener("click", () => load(currentUrl));
+  document.getElementById("q").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") load("/api/features/?page_size=25");
+  });
+
+  rows.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-action]");
+    if (!btn) return;
+    const tr = btn.closest("tr");
+    const id = tr.dataset.id;
+
+    if (btn.dataset.action === "delete") {
+      if (!confirm(`Delete feature #${id}?`)) return;
+      const r = await Auth.fetch(`/api/features/${id}/`, {method: "DELETE"});
+      if (r.ok) { flash(`Deleted feature #${id}`); load(currentUrl); }
+      else flash(`Error ${r.status} deleting`, "danger");
+      return;
+    }
+
+    if (btn.dataset.action === "save") {
+      const name  = tr.querySelector('[data-field="name"]').value;
+      const color = tr.querySelector('[data-field="color"]').value;
+      const r = await Auth.fetch(`/api/features/${id}/`, {
+        method: "PATCH",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({properties: {name, color}}),
+      });
+      if (r.ok) flash(`Saved feature #${id}`);
+      else flash(`Error ${r.status} saving`, "danger");
+    }
+  });
+
+  window.addEventListener("load", () => load(currentUrl));
+</script>
+{% endblock %}
