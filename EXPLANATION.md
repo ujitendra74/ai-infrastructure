@@ -2,7 +2,7 @@
 
 This document explains **what I built**, **why I made the design choices I did**,
 and **how each part of the assignment is satisfied**. Read it alongside the code
-in `geo_api/`.
+in `backend/`.
 
 ---
 
@@ -19,7 +19,7 @@ in `geo_api/`.
 | 7 | HTML page listing + editing feature properties (Bootstrap for bonus)       | `frontend/templates/frontend/features.html`                       |
 | 8 | PostGIS storage                                                            | `features/models.py` (`GeometryField`, `srid=4326`) + `docker-compose.yml` |
 | 9 | Dockerfile + docker-compose (bonus)                                        | `Dockerfile`, `docker-compose.yml`, `entrypoint.sh`               |
-| 10| README                                                                     | `geo_api/README.md`                                               |
+| 10| README                                                                     | `backend/README.md`                                               |
 
 ---
 
